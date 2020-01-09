@@ -147,7 +147,7 @@ namespace Simulators
 
       double force[3];
       double position[3];
-      double orientation[2];
+      double orientation[3];
 
       // Retrieve fins.
       unsigned fins;
@@ -186,6 +186,8 @@ namespace Simulators
           delete vehicle;
           return 0;
         }
+
+        orientation[2] = 0.0;
 
         vehicle->addForce(new Simulators::VSIM::Engine(i, force, position, orientation, eng_max_force));
       }
