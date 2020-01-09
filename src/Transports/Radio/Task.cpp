@@ -141,7 +141,8 @@ namespace Transports
         m_radio(NULL),
         m_powered(false),
         m_reporter(NULL),
-        m_telemetry(NULL)
+        m_telemetry(NULL),
+        m_comm_systems_query(NULL)
       {
 
         // Define configuration parameters.
@@ -683,6 +684,7 @@ namespace Transports
       {
         Memory::clear(m_reporter);
         Memory::clear(m_telemetry);
+        Memory::clear(m_comm_systems_query);
       }
 
       void
