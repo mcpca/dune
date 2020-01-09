@@ -82,7 +82,12 @@ namespace DUNE
     void
     String::rtrim(char* str)
     {
-      char* r = str + std::strlen(str) - 1; // Rightmost character
+      std::size_t len = std::strlen(str);
+
+      if (len == 0)
+        return;
+
+      char* r = str + len - 1; // Rightmost character
 
       for (; isspace(*r); --r)
         *r = 0;
