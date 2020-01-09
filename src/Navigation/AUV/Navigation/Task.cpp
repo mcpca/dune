@@ -190,7 +190,8 @@ namespace Navigation
 
         Task(const std::string& name, Tasks::Context& ctx):
           DUNE::Navigation::BasicNavigation(name, ctx),
-          m_avg_speed(NULL)
+          m_avg_speed(NULL),
+          m_speed_model(NULL)
         {
           // Declare configuration parameters.
           param("Position Noise Covariance with IMU", m_args.pos_noise)
