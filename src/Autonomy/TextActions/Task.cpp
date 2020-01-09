@@ -100,6 +100,13 @@ namespace Autonomy
       }
 
       void
+      onResourceRelease(void)
+      {
+        Memory::clear(m_pcs);
+        Memory::clear(m_vstate);
+      }
+
+      void
       consume(const IMC::PlanControlState * msg)
       {
         Memory::replace(m_pcs, msg->clone());
