@@ -100,7 +100,10 @@ namespace Simulators
       Driver(DriverArguments* a_args, IMC::SimulatedState* a_sstate, Tasks::Task* a_task):
       m_task(a_task),
       m_args(a_args),
-      m_sstate(a_sstate)
+      m_sstate(a_sstate),
+      m_sock(NULL),
+      m_prng(NULL),
+      m_current_op(NULL)
       {
         //Initialize UDP socket in multicast
         m_sock = new DUNE::Network::UDPSocket();

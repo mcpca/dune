@@ -82,7 +82,7 @@ namespace Simulators
       //! Modem driver handler.
       Driver* m_driver;
       //! Simulated state.
-      IMC::SimulatedState* m_sstate;
+      IMC::SimulatedState m_sstate;
       
       //! Constructor.
       //! @param[in] name task name.
@@ -90,8 +90,7 @@ namespace Simulators
       Task(const std::string& name, Tasks::Context& ctx):
         Tasks::Task(name, ctx),
         m_ticket(NULL),
-        m_driver(NULL),
-        m_sstate(NULL)
+        m_driver(NULL)
       {
         param("UDP Communications -- Multicast Address", m_args.driver_args.udp_maddr)
         .defaultValue("225.0.2.1")
@@ -131,8 +130,7 @@ namespace Simulators
       void
       onResourceAcquisition(void)
       {
-        m_sstate = new IMC::SimulatedState;
-        m_driver = new Driver(&m_args.driver_args, m_sstate, this);
+        m_driver = new Driver(&m_args.driver_args, &m_sstate, this);
         m_driver->start();
 
         //Deactivate until SimulatedState message is received
@@ -294,9 +292,9 @@ namespace Simulators
           requestActivation();
 
         // Define vehicle origin.
-        m_sstate->lat    = msg->lat;
-        m_sstate->lon    = msg->lon;
-        m_sstate->height = msg->height;
+        m_sstate.lat    = msg->lat;
+        m_sstate.lon    = msg->lon;
+        m_sstate.height = msg->height;
       }
 
       void
@@ -305,7 +303,7 @@ namespace Simulators
         if(!isActive())
           requestActivation();
 
-        *m_sstate = *msg;
+        m_sstate = *msg;
       }
 
       //! Parse SimAcousticMessage into UamRxFrame and send.
