@@ -47,6 +47,13 @@ namespace Control
       //! Number of fins.
       static const int c_fins = 4;
 
+      enum FinEffectVelocityUnit
+      {
+        FEVU_NONE = 0,
+        FEVU_RPM,
+        FEVU_MPS,
+      };
+
       struct Arguments
       {
         //! Maximum fin rotation.
@@ -61,8 +68,6 @@ namespace Control
         double max_fin_rate;
         //! ServoPosition label
         std::string spos_label;
-        //! Fins effect velocity dependent
-        bool velocity_dependent;
         //! Fins effect velocity dependent
         std::string velocity_dependent_unit;
         //! minimum RPM value
@@ -109,6 +114,7 @@ namespace Control
         Arguments m_args;
         Math::MovingAverage<double>* m_avg_ms ;
         Math::MovingAverage<double>* m_avg_rpm; 
+        FinEffectVelocityUnit m_fevu;
 
         Task(const std::string& name, Tasks::Context& ctx):
           Tasks::Task(name, ctx),
@@ -137,13 +143,9 @@ namespace Control
           .units(Units::NewtonMeterPerRadian)
           .description("Fin effect N");
 
-          param("Fin effect Velocity dependent", m_args.velocity_dependent)
-          .defaultValue("false")
-          .description("Fin effect Velocity dependent");
-
           param("Fin effect Velocity dependent unit", m_args.velocity_dependent_unit)
-          .defaultValue("RPM")
-          .values("RPM, MeterPerSecond")
+          .defaultValue("None")
+          .values("RPM, MeterPerSecond, None")
           .description("Fin effect Velocity dependent unit");
 
           param("Fin effect Rpm minimum value", m_args.rpm_minimum)
@@ -212,6 +214,31 @@ namespace Control
 
         }
 
+        void parseFinEffectVelocityUnit(void)
+        {
+          if (m_args.velocity_dependent_unit == "RPM")
+          {
+            debug("Setting fin effect velocity unit to RPM.");
+            m_fevu = FEVU_RPM;
+          }
+          else if (m_args.velocity_dependent_unit == "MeterPerSecond")
+          {
+            debug("Setting fin effect velocity unit to MPS.");
+            m_fevu = FEVU_MPS;
+          }
+          else if (m_args.velocity_dependent_unit == "None")
+          {
+            debug("Setting fin effect velocity unit to NONE.");
+            m_fevu = FEVU_NONE;
+          }
+          else
+          {
+            war(
+            "Unknown fin effect velocity unit setting, defaulting to NONE.");
+            m_fevu = FEVU_NONE;
+          }
+        }
+
         void
         onUpdateParameters(void)
         {
@@ -220,6 +247,8 @@ namespace Control
 
           if (paramChanged(m_args.max_fin_rate))
             m_args.max_fin_rate = Angles::radians(m_args.max_fin_rate);
+
+          parseFinEffectVelocityUnit();
         }
 
         void
@@ -423,20 +452,17 @@ namespace Control
           }
 
           // Allocate N
-          if(!m_args.velocity_dependent)
+          switch (m_fevu)
           {
-            ang = (n / m_args.conv[2]) * 0.5;
-          }
-          else
-          {
-            if(m_args.velocity_dependent_unit == "RPM")
-            {  
-             ang = m_args.k_yaw * (n / (m_args.conv[2]* rpm *rpm)) * 0.5;
-            }
-            else
-            {
-              ang = m_args.k_yaw * (n / (m_args.conv[2]* m_s *m_s)) * 0.5;
-            }
+            case FEVU_RPM:
+              ang = m_args.k_yaw * (n / (m_args.conv[2] * rpm * rpm)) * 0.5;
+              break;
+            case FEVU_MPS:
+              ang = m_args.k_yaw * (n / (m_args.conv[2] * m_s * m_s)) * 0.5;
+              break;
+            default:
+              ang = (n / m_args.conv[2]) * 0.5;
+              break;
           }
 
           if (trimValueMod(ang, -m_args.max_fin_rot, m_args.max_fin_rot))
@@ -452,37 +478,31 @@ namespace Control
           m_fins[0].value = -ang;
           m_fins[3].value = -ang;
 
-          if(m_args.velocity_dependent)
+          switch (m_fevu)
           {
-             if(m_args.velocity_dependent_unit == "RPM")
-            {
-               m_allocated.n = m_args.k_yaw * m_args.conv[2]* rpm *rpm * 2.0;
-            }
-            else
-            {
-               m_allocated.n = m_args.k_yaw * m_args.conv[2]* m_s * m_s * 2.0;
-            }
-          }
-          else
-          {
-            m_allocated.n = ang * m_args.conv[2] * 2.0;
+            case FEVU_RPM:
+              m_allocated.n = m_args.k_yaw * m_args.conv[2] * rpm * rpm * 2.0;
+              break;
+            case FEVU_MPS:
+              m_allocated.n = m_args.k_yaw * m_args.conv[2] * m_s * m_s * 2.0;
+              break;
+            default:
+              m_allocated.n = ang * m_args.conv[2] * 2.0;
+              break;
           }
 
           // Allocate M
-          if(m_args.velocity_dependent)
+          switch (m_fevu)
           {
-            if(m_args.velocity_dependent_unit == "RPM")
-            {
-                ang = m_args.k_pitch * (m / (m_args.conv[1]* rpm *rpm)) * 0.5;
-            }
-            else
-            {
-                ang = m_args.k_pitch * (m /(m_args.conv[1]* m_s *m_s)) * 0.5;
-            }
-          }
-          else
-          {
-            ang = (m / m_args.conv[1]) * 0.5;
+            case FEVU_RPM:
+              ang = m_args.k_pitch * (m / (m_args.conv[1] * rpm * rpm)) * 0.5;
+              break;
+            case FEVU_MPS:
+              ang = m_args.k_pitch * (m / (m_args.conv[1] * m_s * m_s)) * 0.5;
+              break;
+            default:
+              ang = (m / m_args.conv[1]) * 0.5;
+              break;
           }
 
           if (trimValueMod(ang, -m_args.max_fin_rot, m_args.max_fin_rot))
@@ -498,40 +518,34 @@ namespace Control
           m_fins[1].value = -ang;
           m_fins[2].value = -ang;
 
-          if(m_args.velocity_dependent)
+          switch (m_fevu)
           {
-             if(m_args.velocity_dependent_unit == "RPM")
-            {
-               m_allocated.m = m_args.k_pitch * m_args.conv[1]* rpm *rpm * 2.0;
-            }
-            else
-            {
-               m_allocated.m = m_args.k_pitch * m_args.conv[1]* m_s * m_s * 2.0;
-            }
-          }
-          else
-          {
-          m_allocated.m = ang * m_args.conv[1] * 2.0;
+            case FEVU_RPM:
+              m_allocated.m = m_args.k_pitch * m_args.conv[1] * rpm * rpm * 2.0;
+              break;
+            case FEVU_MPS:
+              m_allocated.m = m_args.k_pitch * m_args.conv[1] * m_s * m_s * 2.0;
+              break;
+            default:
+              m_allocated.m = ang * m_args.conv[1] * 2.0;
+              break;
           }
 
           // Allocate K
           // Attempt to distribute evenly by the four fins
-          if(m_args.velocity_dependent &&  m_args.roll_not_velocity_dependent == false)
+          switch (m_fevu & (m_args.roll_not_velocity_dependent ? 0u : ~0u))
           {
-            if(m_args.velocity_dependent_unit == "RPM")
-            {
-             ang = m_args.k_roll * (k / (m_args.conv[0] * rpm *rpm)) / c_fins;
-             angroll = ang;
-            }
-            else
-            {
-               ang = m_args.k_roll * (k / (m_args.conv[0] * m_s * m_s)) / c_fins;
-               angroll = ang;
-            }
-          }
-          else
-          {
-            ang = (k / m_args.conv[0]) / c_fins;
+            case FEVU_RPM:
+              ang = m_args.k_roll * (k / (m_args.conv[0] * rpm * rpm)) / c_fins;
+              angroll = ang;
+              break;
+            case FEVU_MPS:
+              ang = m_args.k_roll * (k / (m_args.conv[0] * m_s * m_s)) / c_fins;
+              angroll = ang;
+              break;
+            default:
+              ang = (k / m_args.conv[0]) / c_fins;
+              break;
           }
 
           // Determine the maximum angle for even distribution
@@ -543,74 +557,73 @@ namespace Control
           m_fins[0].value -= ang;
           m_fins[3].value += ang;
 
-            // Remove the used up margin from the avaliable margins
-            roll_margin_hfins -= std::abs(ang);
-            roll_margin_vfins -= std::abs(ang);
+          // Remove the used up margin from the avaliable margins
+          roll_margin_hfins -= std::abs(ang);
+          roll_margin_vfins -= std::abs(ang);
 
-          if(m_args.velocity_dependent  &&  m_args.roll_not_velocity_dependent == false)
+          switch (m_fevu & (m_args.roll_not_velocity_dependent ? 0u : ~0u))
           {
-            ang = angroll - ang;
-              
-            if(m_args.velocity_dependent_unit == "RPM")
-            {
+            case FEVU_RPM:
+              ang = angroll - ang;
               if (roll_margin_hfins > 0)
               {
                 ang = trimValue(ang, -roll_margin_hfins, roll_margin_hfins);
-  
+
                 m_fins[1].value += ang;
                 m_fins[2].value -= ang;
               }
               else if (roll_margin_vfins > 0)
               {
                 ang = trimValue(ang, -roll_margin_vfins, roll_margin_vfins);
-  
+
                 m_fins[0].value -= ang;
                 m_fins[3].value += ang;
               }
-              m_allocated.k = m_args.conv[0]* rpm * rpm * c_fins;
-            }
-            else
-            {
+              m_allocated.k = m_args.conv[0] * rpm * rpm * c_fins;
+              break;
+
+            case FEVU_MPS:
+              ang = angroll - ang;
               if (roll_margin_hfins > 0)
               {
                 ang = trimValue(ang, -roll_margin_hfins, roll_margin_hfins);
-  
+
                 m_fins[1].value += ang;
                 m_fins[2].value -= ang;
               }
               else if (roll_margin_vfins > 0)
               {
                 ang = trimValue(ang, -roll_margin_vfins, roll_margin_vfins);
-  
+
                 m_fins[0].value -= ang;
                 m_fins[3].value += ang;
-              } 
-              m_allocated.k = m_args.conv[0]* m_s * m_s * c_fins;
-            }
+              }
+              m_allocated.k = m_args.conv[0] * m_s * m_s * c_fins;
+              break;
+
+            default:
+              m_allocated.k = ang * m_args.conv[0] * c_fins;
+
+              // Check where to place the remaining roll torque
+              ang = ((k - m_allocated.k) / m_args.conv[0]) * 0.5;
+              if (roll_margin_hfins > 0)
+              {
+                ang = trimValue(ang, -roll_margin_hfins, roll_margin_hfins);
+
+                m_fins[1].value += ang;
+                m_fins[2].value -= ang;
+                m_allocated.k += ang * m_args.conv[0] * 2.0;
+              }
+              else if (roll_margin_vfins > 0)
+              {
+                ang = trimValue(ang, -roll_margin_vfins, roll_margin_vfins);
+
+                m_fins[0].value -= ang;
+                m_fins[3].value += ang;
+                m_allocated.k += ang * m_args.conv[0] * 2.0;
+              }
           }
-          else
-          {
-            m_allocated.k = ang * m_args.conv[0] * c_fins;
 
-            // Check where to place the remaining roll torque
-            ang = ((k - m_allocated.k) / m_args.conv[0]) * 0.5;
-            if (roll_margin_hfins > 0)
-            {
-              ang = trimValue(ang, -roll_margin_hfins, roll_margin_hfins);
-
-              m_fins[1].value += ang;
-              m_fins[2].value -= ang;
-              m_allocated.k += ang * m_args.conv[0] * 2.0;
-            }
-            else if (roll_margin_vfins > 0)
-            {
-              ang = trimValue(ang, -roll_margin_vfins, roll_margin_vfins);
-
-              m_fins[0].value -= ang;
-              m_fins[3].value += ang;
-              m_allocated.k += ang * m_args.conv[0] * 2.0;
-            }
-          }
           dispatchAllFins();
 
           dispatch(m_allocated);
