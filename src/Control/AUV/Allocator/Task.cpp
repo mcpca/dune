@@ -78,13 +78,13 @@ namespace Control
         double max_rpm;
         //! Max Meter Per Second value
         double max_ms;
-        //! K pitch 
+        //! K pitch
         double k_pitch;
-        //!  K roll
+        //! K roll
         double k_roll;
-        //!  K yaw
+        //! K yaw
         double k_yaw;
-        //!  
+        //! If set, don't use velocity dependent allocation for roll.
         bool roll_not_velocity_dependent;
       };
 
@@ -97,9 +97,9 @@ namespace Control
         //! Allocated torques feedback message.
         IMC::AllocatedControlTorques m_allocated;
         //! Last lats EstimatedState
-        IMC::EstimatedState * m_last_estimated_state;
+        IMC::EstimatedState* m_last_estimated_state;
         //! Last lats Rpm
-        IMC::Rpm * m_last_rpm;
+        IMC::Rpm* m_last_rpm;
         //! Braking
         bool m_braking;
         //! Entity id for the servo position messages
@@ -112,8 +112,9 @@ namespace Control
         Time::Delta m_delta;
         //! Task arguments.
         Arguments m_args;
-        Math::MovingAverage<double>* m_avg_ms ;
-        Math::MovingAverage<double>* m_avg_rpm; 
+
+        Math::MovingAverage<double>* m_avg_ms;
+        Math::MovingAverage<double>* m_avg_rpm;
         FinEffectVelocityUnit m_fevu;
 
         Task(const std::string& name, Tasks::Context& ctx):
@@ -192,18 +193,19 @@ namespace Control
           .defaultValue("false")
           .description("Roll not velocity dependent");
 
-
-
           param("Entity Label - Servo Position", m_args.spos_label)
           .defaultValue("")
           .description("Label of the servo position message to compute produced torque");
+
           m_ctx.config.get("General", "Maximum Underwater RPMs", "1700.0", m_args.max_rpm);
-          m_ctx.config.get("General","Maximum Absolute Speed" , "2.0", m_args.max_ms);
+          m_ctx.config.get("General", "Maximum Absolute Speed", "2.0", m_args.max_ms);
 
           // Initialize main entity state.
           setEntityState(IMC::EntityState::ESTA_NORMAL, Status::CODE_IDLE);
+
           m_avg_ms = new Math::MovingAverage<double>(150);
           m_avg_rpm = new Math::MovingAverage<double>(10);
+
           // Register handler routines.
           bind<IMC::Brake>(this);
           bind<IMC::DesiredControl>(this);
@@ -269,6 +271,7 @@ namespace Control
           m_braking = false;
           requestDeactivation();
         }
+
         //! Release resources.
         void
         onResourceRelease(void)
@@ -277,8 +280,8 @@ namespace Control
             Memory::clear(m_last_rpm);
             Memory::clear(m_avg_ms);
             Memory::clear(m_avg_rpm);
-          
         }
+
         void
         onResourceInitialization(void)
         {
@@ -291,6 +294,7 @@ namespace Control
             m_last[i].id = i;
             m_servo_pos[i] = 0.0;
           }
+
           m_avg_ms = new Math::MovingAverage<double>(MS_AVG_SIZE);
           m_avg_rpm = new Math::MovingAverage<double>(RPM_AVG_SIZE);
 
@@ -298,6 +302,7 @@ namespace Control
           {
             m_avg_rpm->update(m_args.rpm_minimum/1000);
           }
+
           for (int i = 0; i < MS_AVG_SIZE; i++)
           {
             m_avg_ms->update(m_args.ms_minimum);
@@ -430,15 +435,17 @@ namespace Control
           float ang;
           float roll_margin_vfins;
           float roll_margin_hfins;
-          double rpm_m = m_args.rpm_minimum ; 
+          double rpm_m = m_args.rpm_minimum;
           double m_s = m_args.ms_minimum;
-          double rpm = rpm_m/1000, m_s_m = m_s;
-          float angroll = 0 ;
+          double rpm = rpm_m / 1000;
+          double m_s_m = m_s;
+          float angroll = 0;
+
           if(m_last_rpm!=NULL)
           {
-            rpm_m = (double)m_last_rpm->value;
-            trimValueMod( rpm_m , m_args.rpm_minimum, m_args.max_rpm);
-            rpm_m =rpm_m /1000;
+            rpm_m = (double) m_last_rpm->value;
+            trimValueMod(rpm_m, m_args.rpm_minimum, m_args.max_rpm);
+            rpm_m = rpm_m / 1000;
             m_avg_rpm->update(rpm_m);
             rpm = m_avg_rpm->mean();
           }
@@ -446,9 +453,9 @@ namespace Control
           if(m_last_estimated_state!=NULL)
           {
             m_s_m = (double) m_last_estimated_state->u;
-            trimValueMod( m_s_m , m_args.ms_minimum, m_args.max_ms);
+            trimValueMod(m_s_m, m_args.ms_minimum, m_args.max_ms);
             m_avg_ms->update(m_s_m);
-            m_s = m_avg_ms->mean();   
+            m_s = m_avg_ms->mean();
           }
 
           // Allocate N
