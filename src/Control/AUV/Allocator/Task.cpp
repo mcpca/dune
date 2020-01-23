@@ -435,36 +435,48 @@ namespace Control
           float roll_margin_vfins;
           float roll_margin_hfins;
 
-          double speed_rpm = m_args.rpm_minimum / 1000.0;
-          double speed_mps = m_args.ms_minimum;
-
           float angroll = 0;
+          double speed = 0;
 
-          if(m_last_rpm != NULL)
+          switch (m_fevu)
           {
-            m_avg_rpm->update(
-            trimValue(m_last_rpm->value, m_args.rpm_minimum, m_args.max_rpm)
-            / 1000.0);
+            case FEVU_RPM:
+              speed = m_args.rpm_minimum / 1000.0;
 
-            speed_rpm = m_avg_rpm->mean();
-          }
+              if (m_last_rpm != NULL)
+              {
+                m_avg_rpm->update(
+                trimValue(m_last_rpm->value, m_args.rpm_minimum, m_args.max_rpm)
+                / 1000.0);
 
-          if(m_last_estimated_state != NULL)
-          {
-            m_avg_ms->update(trimValue(m_last_estimated_state->u,
-                                       m_args.ms_minimum, m_args.max_ms));
+                speed = m_avg_rpm->mean();
+              }
 
-            speed_mps = m_avg_ms->mean();
+              break;
+
+            case FEVU_MPS:
+              speed = m_args.ms_minimum;
+
+              if (m_last_estimated_state != NULL)
+              {
+                m_avg_ms->update(trimValue(m_last_estimated_state->u,
+                                           m_args.ms_minimum, m_args.max_ms));
+
+                speed = m_avg_ms->mean();
+              }
+
+              break;
+
+            default:
+              break;
           }
 
           // Allocate N
           switch (m_fevu)
           {
-            case FEVU_RPM:
-              ang = m_args.k_yaw * (n / (m_args.conv[2] * speed_rpm * speed_rpm)) * 0.5;
-              break;
+            case FEVU_RPM: // fall-through
             case FEVU_MPS:
-              ang = m_args.k_yaw * (n / (m_args.conv[2] * speed_mps * speed_mps)) * 0.5;
+              ang = m_args.k_yaw * (n / (m_args.conv[2] * speed * speed)) * 0.5;
               break;
             default:
               ang = (n / m_args.conv[2]) * 0.5;
@@ -486,11 +498,10 @@ namespace Control
 
           switch (m_fevu)
           {
-            case FEVU_RPM:
-              m_allocated.n = m_args.k_yaw * m_args.conv[2] * speed_rpm * speed_rpm * 2.0;
-              break;
+            case FEVU_RPM: // fall-through
             case FEVU_MPS:
-              m_allocated.n = m_args.k_yaw * m_args.conv[2] * speed_mps * speed_mps * 2.0;
+              m_allocated.n
+              = m_args.k_yaw * m_args.conv[2] * speed * speed * 2.0;
               break;
             default:
               m_allocated.n = ang * m_args.conv[2] * 2.0;
@@ -500,11 +511,9 @@ namespace Control
           // Allocate M
           switch (m_fevu)
           {
-            case FEVU_RPM:
-              ang = m_args.k_pitch * (m / (m_args.conv[1] * speed_rpm * speed_rpm)) * 0.5;
-              break;
+            case FEVU_RPM: // fall-through
             case FEVU_MPS:
-              ang = m_args.k_pitch * (m / (m_args.conv[1] * speed_mps * speed_mps)) * 0.5;
+              ang = m_args.k_pitch * (m / (m_args.conv[1] * speed * speed)) * 0.5;
               break;
             default:
               ang = (m / m_args.conv[1]) * 0.5;
@@ -526,11 +535,10 @@ namespace Control
 
           switch (m_fevu)
           {
-            case FEVU_RPM:
-              m_allocated.m = m_args.k_pitch * m_args.conv[1] * speed_rpm * speed_rpm * 2.0;
-              break;
+            case FEVU_RPM: // fall-through
             case FEVU_MPS:
-              m_allocated.m = m_args.k_pitch * m_args.conv[1] * speed_mps * speed_mps * 2.0;
+              m_allocated.m
+              = m_args.k_pitch * m_args.conv[1] * speed * speed * 2.0;
               break;
             default:
               m_allocated.m = ang * m_args.conv[1] * 2.0;
@@ -542,11 +550,9 @@ namespace Control
           switch (m_fevu & (m_args.roll_not_velocity_dependent ? 0u : ~0u))
           {
             case FEVU_RPM:
-              ang = m_args.k_roll * (k / (m_args.conv[0] * speed_rpm * speed_rpm)) / c_fins;
-              angroll = ang;
-              break;
             case FEVU_MPS:
-              ang = m_args.k_roll * (k / (m_args.conv[0] * speed_mps * speed_mps)) / c_fins;
+              ang
+              = m_args.k_roll * (k / (m_args.conv[0] * speed * speed)) / c_fins;
               angroll = ang;
               break;
             default:
@@ -569,25 +575,7 @@ namespace Control
 
           switch (m_fevu & (m_args.roll_not_velocity_dependent ? 0u : ~0u))
           {
-            case FEVU_RPM:
-              ang = angroll - ang;
-              if (roll_margin_hfins > 0)
-              {
-                ang = trimValue(ang, -roll_margin_hfins, roll_margin_hfins);
-
-                m_fins[1].value += ang;
-                m_fins[2].value -= ang;
-              }
-              else if (roll_margin_vfins > 0)
-              {
-                ang = trimValue(ang, -roll_margin_vfins, roll_margin_vfins);
-
-                m_fins[0].value -= ang;
-                m_fins[3].value += ang;
-              }
-              m_allocated.k = m_args.conv[0] * speed_rpm * speed_rpm * c_fins;
-              break;
-
+            case FEVU_RPM: // fall-through
             case FEVU_MPS:
               ang = angroll - ang;
               if (roll_margin_hfins > 0)
@@ -604,7 +592,8 @@ namespace Control
                 m_fins[0].value -= ang;
                 m_fins[3].value += ang;
               }
-              m_allocated.k = m_args.conv[0] * speed_mps * speed_mps * c_fins;
+
+              m_allocated.k = m_args.conv[0] * speed * speed * c_fins;
               break;
 
             default:
@@ -628,6 +617,8 @@ namespace Control
                 m_fins[3].value += ang;
                 m_allocated.k += ang * m_args.conv[0] * 2.0;
               }
+
+              break;
           }
 
           dispatchAllFins();
