@@ -33,9 +33,6 @@
 // DUNE headers.
 #include <DUNE/DUNE.hpp>
 
-#define MS_AVG_SIZE 150
-#define RPM_AVG_SIZE 15
-
 namespace Control
 {
   namespace AUV
@@ -46,6 +43,14 @@ namespace Control
 
       //! Number of fins.
       static const int c_fins = 4;
+
+      //! Window size for the moving average of the speed values when the
+      //! units for velocity dependent allocation are MPS.
+      static const int c_ms_winsize = 150;
+
+      //! Window size for the moving average of the speed values when the
+      //! units for velocity dependent allocation are RPM.
+      static const int c_rpm_winsize = 15;
 
       enum FinEffectVelocityUnit
       {
@@ -297,13 +302,13 @@ namespace Control
           switch (m_fevu)
           {
             case FEVU_RPM:
-              winsize = RPM_AVG_SIZE;
+              winsize = c_rpm_winsize;
               fill_value = m_args.rpm_minimum / 1000.0;
               m_avg_speed = new Math::MovingAverage<double>(winsize);
               break;
 
             case FEVU_MPS:
-              winsize = MS_AVG_SIZE;
+              winsize = c_ms_winsize;
               fill_value = m_args.ms_minimum;
               m_avg_speed = new Math::MovingAverage<double>(winsize);
               break;
