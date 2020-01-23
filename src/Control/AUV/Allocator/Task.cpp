@@ -59,12 +59,20 @@ namespace Control
         FEVU_MPS,
       };
 
+      enum TorqueAxis
+      {
+        TA_ROLL = 0,
+        TA_PITCH,
+        TA_YAW,
+        TA_NAX,
+      };
+
       struct Arguments
       {
         //! Maximum fin rotation.
         float max_fin_rot;
         //! Angle to torque conversion factor (Nm/rad).
-        float conv[3];
+        float conv[TA_NAX];
         //! Percentage of fin margin to use for braking
         float brake_margin;
         //! Pitch up when braking
@@ -134,17 +142,17 @@ namespace Control
           .units(Units::Degree)
           .description(DTR("Maximum admissible fin rotation"));
 
-          param("Fin effect K", m_args.conv[0])
+          param("Fin effect K", m_args.conv[TA_ROLL])
           .defaultValue("0.25")
           .units(Units::NewtonMeterPerRadian)
           .description("Fin effect K");
 
-          param("Fin effect M", m_args.conv[1])
+          param("Fin effect M", m_args.conv[TA_PITCH])
           .defaultValue("0.5")
           .units(Units::NewtonMeterPerRadian)
           .description("Fin effect M");
 
-          param("Fin effect N", m_args.conv[2])
+          param("Fin effect N", m_args.conv[TA_YAW])
           .defaultValue("0.5")
           .units(Units::NewtonMeterPerRadian)
           .description("Fin effect N");
@@ -490,10 +498,11 @@ namespace Control
           {
             case FEVU_RPM: // fall-through
             case FEVU_MPS:
-              ang = m_args.k_yaw * (n / (m_args.conv[2] * speed * speed)) * 0.5;
+              ang = m_args.k_yaw * (n / (m_args.conv[TA_YAW] * speed * speed))
+                    * 0.5;
               break;
             default:
-              ang = (n / m_args.conv[2]) * 0.5;
+              ang = (n / m_args.conv[TA_YAW]) * 0.5;
               break;
           }
 
@@ -515,10 +524,10 @@ namespace Control
             case FEVU_RPM: // fall-through
             case FEVU_MPS:
               m_allocated.n
-              = m_args.k_yaw * m_args.conv[2] * speed * speed * 2.0;
+              = m_args.k_yaw * m_args.conv[TA_YAW] * speed * speed * 2.0;
               break;
             default:
-              m_allocated.n = ang * m_args.conv[2] * 2.0;
+              m_allocated.n = ang * m_args.conv[TA_YAW] * 2.0;
               break;
           }
 
@@ -527,10 +536,11 @@ namespace Control
           {
             case FEVU_RPM: // fall-through
             case FEVU_MPS:
-              ang = m_args.k_pitch * (m / (m_args.conv[1] * speed * speed)) * 0.5;
+              ang = m_args.k_pitch
+                    * (m / (m_args.conv[TA_PITCH] * speed * speed)) * 0.5;
               break;
             default:
-              ang = (m / m_args.conv[1]) * 0.5;
+              ang = (m / m_args.conv[TA_PITCH]) * 0.5;
               break;
           }
 
@@ -552,10 +562,10 @@ namespace Control
             case FEVU_RPM: // fall-through
             case FEVU_MPS:
               m_allocated.m
-              = m_args.k_pitch * m_args.conv[1] * speed * speed * 2.0;
+              = m_args.k_pitch * m_args.conv[TA_PITCH] * speed * speed * 2.0;
               break;
             default:
-              m_allocated.m = ang * m_args.conv[1] * 2.0;
+              m_allocated.m = ang * m_args.conv[TA_PITCH] * 2.0;
               break;
           }
 
@@ -566,11 +576,11 @@ namespace Control
             case FEVU_RPM:
             case FEVU_MPS:
               ang
-              = m_args.k_roll * (k / (m_args.conv[0] * speed * speed)) / c_fins;
+              = m_args.k_roll * (k / (m_args.conv[TA_ROLL] * speed * speed)) / c_fins;
               angroll = ang;
               break;
             default:
-              ang = (k / m_args.conv[0]) / c_fins;
+              ang = (k / m_args.conv[TA_ROLL]) / c_fins;
               break;
           }
 
@@ -607,21 +617,21 @@ namespace Control
                 m_fins[3].value += ang;
               }
 
-              m_allocated.k = m_args.conv[0] * speed * speed * c_fins;
+              m_allocated.k = m_args.conv[TA_ROLL] * speed * speed * c_fins;
               break;
 
             default:
-              m_allocated.k = ang * m_args.conv[0] * c_fins;
+              m_allocated.k = ang * m_args.conv[TA_ROLL] * c_fins;
 
               // Check where to place the remaining roll torque
-              ang = ((k - m_allocated.k) / m_args.conv[0]) * 0.5;
+              ang = ((k - m_allocated.k) / m_args.conv[TA_ROLL]) * 0.5;
               if (roll_margin_hfins > 0)
               {
                 ang = trimValue(ang, -roll_margin_hfins, roll_margin_hfins);
 
                 m_fins[1].value += ang;
                 m_fins[2].value -= ang;
-                m_allocated.k += ang * m_args.conv[0] * 2.0;
+                m_allocated.k += ang * m_args.conv[TA_ROLL] * 2.0;
               }
               else if (roll_margin_vfins > 0)
               {
@@ -629,7 +639,7 @@ namespace Control
 
                 m_fins[0].value -= ang;
                 m_fins[3].value += ang;
-                m_allocated.k += ang * m_args.conv[0] * 2.0;
+                m_allocated.k += ang * m_args.conv[TA_ROLL] * 2.0;
               }
 
               break;
@@ -658,7 +668,7 @@ namespace Control
           float h_margin_left = m_args.max_fin_rot * (1.0 - m_args.brake_margin);
 
           // Allocate M
-          ang = (m / m_args.conv[1]) * 0.5;
+          ang = (m / m_args.conv[TA_PITCH]) * 0.5;
 
           ang = trimValue(ang, -h_margin_left, h_margin_left);
 
@@ -669,7 +679,7 @@ namespace Control
           h_margin_left = m_args.max_fin_rot - std::abs(ang);
 
           // Allocate K
-          ang = (k / m_args.conv[0]) / c_fins;
+          ang = (k / m_args.conv[TA_ROLL]) / c_fins;
 
           ang = trimValue(ang, -h_margin_left, h_margin_left);
 
@@ -678,7 +688,7 @@ namespace Control
 
           float v_margin_left = m_args.max_fin_rot * (1.0 - m_args.brake_margin);
 
-          ang = (k / m_args.conv[0]) / c_fins - ang;
+          ang = (k / m_args.conv[TA_ROLL]) / c_fins - ang;
 
           ang = trimValue(ang, -v_margin_left, v_margin_left);
 
