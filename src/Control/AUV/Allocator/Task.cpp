@@ -113,8 +113,7 @@ namespace Control
         //! Task arguments.
         Arguments m_args;
 
-        Math::MovingAverage<double>* m_avg_ms;
-        Math::MovingAverage<double>* m_avg_rpm;
+        Math::MovingAverage<double>* m_avg_speed;
         FinEffectVelocityUnit m_fevu;
 
         Task(const std::string& name, Tasks::Context& ctx):
@@ -123,8 +122,7 @@ namespace Control
           m_last_rpm(NULL),
           m_braking(false),
           m_scope_ref(0),
-          m_avg_ms(NULL),
-          m_avg_rpm(NULL)
+          m_avg_speed(NULL)
         {
           param(DTR_RT("Maximum Fin Rotation"), m_args.max_fin_rot)
           .defaultValue("25.0")
@@ -277,8 +275,7 @@ namespace Control
         {
             Memory::clear(m_last_estimated_state);
             Memory::clear(m_last_rpm);
-            Memory::clear(m_avg_ms);
-            Memory::clear(m_avg_rpm);
+            Memory::clear(m_avg_speed);
         }
 
         void
@@ -294,18 +291,29 @@ namespace Control
             m_servo_pos[i] = 0.0;
           }
 
-          m_avg_ms = new Math::MovingAverage<double>(MS_AVG_SIZE);
-          m_avg_rpm = new Math::MovingAverage<double>(RPM_AVG_SIZE);
+          int winsize = 0;
+          double fill_value = 0.0;
 
-          for (int i = 0; i < RPM_AVG_SIZE; i++)
+          switch (m_fevu)
           {
-            m_avg_rpm->update(m_args.rpm_minimum/1000);
+            case FEVU_RPM:
+              winsize = RPM_AVG_SIZE;
+              fill_value = m_args.rpm_minimum / 1000.0;
+              m_avg_speed = new Math::MovingAverage<double>(winsize);
+              break;
+
+            case FEVU_MPS:
+              winsize = MS_AVG_SIZE;
+              fill_value = m_args.ms_minimum;
+              m_avg_speed = new Math::MovingAverage<double>(winsize);
+              break;
+
+            default:
+              break;
           }
 
-          for (int i = 0; i < MS_AVG_SIZE; i++)
-          {
-            m_avg_ms->update(m_args.ms_minimum);
-          }
+          for (int i = 0; i < winsize; i++)
+            m_avg_speed->update(fill_value);
 
         }
 
@@ -445,11 +453,11 @@ namespace Control
 
               if (m_last_rpm != NULL)
               {
-                m_avg_rpm->update(
+                m_avg_speed->update(
                 trimValue(m_last_rpm->value, m_args.rpm_minimum, m_args.max_rpm)
                 / 1000.0);
 
-                speed = m_avg_rpm->mean();
+                speed = m_avg_speed->mean();
               }
 
               break;
@@ -459,10 +467,11 @@ namespace Control
 
               if (m_last_estimated_state != NULL)
               {
-                m_avg_ms->update(trimValue(m_last_estimated_state->u,
-                                           m_args.ms_minimum, m_args.max_ms));
+                m_avg_speed->update(trimValue(m_last_estimated_state->u,
+                                              m_args.ms_minimum,
+                                              m_args.max_ms));
 
-                speed = m_avg_ms->mean();
+                speed = m_avg_speed->mean();
               }
 
               break;
