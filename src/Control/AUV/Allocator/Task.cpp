@@ -122,7 +122,9 @@ namespace Control
           m_last_estimated_state(NULL),
           m_last_rpm(NULL),
           m_braking(false),
-          m_scope_ref(0)
+          m_scope_ref(0),
+          m_avg_ms(NULL),
+          m_avg_rpm(NULL)
         {
           param(DTR_RT("Maximum Fin Rotation"), m_args.max_fin_rot)
           .defaultValue("25.0")
@@ -202,9 +204,6 @@ namespace Control
 
           // Initialize main entity state.
           setEntityState(IMC::EntityState::ESTA_NORMAL, Status::CODE_IDLE);
-
-          m_avg_ms = new Math::MovingAverage<double>(150);
-          m_avg_rpm = new Math::MovingAverage<double>(10);
 
           // Register handler routines.
           bind<IMC::Brake>(this);
