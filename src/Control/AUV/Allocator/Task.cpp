@@ -438,7 +438,7 @@ namespace Control
         void
         consume(const IMC::EstimatedState* msg)
         {
-          if (msg->getSource() != getSystemId())
+          if (msg->getSource() != getSystemId() || m_fevu != FEVU_MPS)
             return;
 
           Memory::clear(m_last_estimated_state);
@@ -448,7 +448,7 @@ namespace Control
         void
         consume(const IMC::Rpm* msg)
         {
-          if (msg->getSource() != getSystemId())
+          if (msg->getSource() != getSystemId() || m_fevu != FEVU_RPM)
             return;
 
           Memory::clear(m_last_rpm);
