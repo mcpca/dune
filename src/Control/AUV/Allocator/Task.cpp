@@ -567,60 +567,51 @@ namespace Control
           roll_margin_hfins -= std::abs(ang);
           roll_margin_vfins -= std::abs(ang);
 
-          if (m_fevu && !m_args.roll_not_velocity_dependent)
+          // Compute how much torque remains to be allocated
+          if (!m_args.roll_not_velocity_dependent && m_fevu)
           {
             m_allocated.k = (ang / m_args.k_roll) * m_args.conv[TA_ROLL] * speed
                             * speed * FIN_NFINS;
-
             ang
             = m_args.k_roll
               * ((k - m_allocated.k) / (m_args.conv[TA_ROLL] * speed * speed))
               * 0.5;
-
-            if (roll_margin_hfins > 0)
-            {
-              ang = trimValue(ang, -roll_margin_hfins, roll_margin_hfins);
-
-              m_fins[FIN_LEFT].value += ang;
-              m_fins[FIN_RIGHT].value -= ang;
-            }
-            else if (roll_margin_vfins > 0)
-            {
-              ang = trimValue(ang, -roll_margin_vfins, roll_margin_vfins);
-
-              m_fins[FIN_BOTTOM].value -= ang;
-              m_fins[FIN_TOP].value += ang;
-            }
-
-            m_allocated.k += (ang / m_args.k_roll) * m_args.conv[TA_ROLL]
-                             * speed * speed * 2.0;
           }
           else
           {
             m_allocated.k = ang * m_args.conv[TA_ROLL] * FIN_NFINS;
-
-            // Check where to place the remaining roll torque
             ang = ((k - m_allocated.k) / m_args.conv[TA_ROLL]) * 0.5;
-            if (roll_margin_hfins > 0)
-            {
-              ang = trimValue(ang, -roll_margin_hfins, roll_margin_hfins);
+          }
 
-              m_fins[FIN_LEFT].value += ang;
-              m_fins[FIN_RIGHT].value -= ang;
-              m_allocated.k += ang * m_args.conv[TA_ROLL] * 2.0;
-            }
-            else if (roll_margin_vfins > 0)
-            {
-              ang = trimValue(ang, -roll_margin_vfins, roll_margin_vfins);
+          // Check where to place the remaining roll torque
+          if (roll_margin_hfins > 0)
+          {
+            ang = trimValue(ang, -roll_margin_hfins, roll_margin_hfins);
 
-              m_fins[FIN_BOTTOM].value -= ang;
-              m_fins[FIN_TOP].value += ang;
+            m_fins[FIN_LEFT].value += ang;
+            m_fins[FIN_RIGHT].value -= ang;
+
+            if (!m_args.roll_not_velocity_dependent && m_fevu)
+              m_allocated.k += (ang / m_args.k_roll) * m_args.conv[TA_ROLL]
+                               * speed * speed * 2.0;
+            else
               m_allocated.k += ang * m_args.conv[TA_ROLL] * 2.0;
-            }
+          }
+          else if (roll_margin_vfins > 0)
+          {
+            ang = trimValue(ang, -roll_margin_vfins, roll_margin_vfins);
+
+            m_fins[FIN_BOTTOM].value -= ang;
+            m_fins[FIN_TOP].value += ang;
+
+            if (!m_args.roll_not_velocity_dependent && m_fevu)
+              m_allocated.k += (ang / m_args.k_roll) * m_args.conv[TA_ROLL]
+                               * speed * speed * 2.0;
+            else
+              m_allocated.k += ang * m_args.conv[TA_ROLL] * 2.0;
           }
 
           dispatchAllFins();
-
           dispatch(m_allocated);
         }
 
