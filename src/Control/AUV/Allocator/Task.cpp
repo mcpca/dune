@@ -41,9 +41,6 @@ namespace Control
     {
       using DUNE_NAMESPACES;
 
-      //! Number of fins.
-      static const int c_fins = 4;
-
       //! Window size for the moving average of the speed values when the
       //! units for velocity dependent allocation are MPS.
       static const int c_ms_winsize = 150;
@@ -65,6 +62,16 @@ namespace Control
         TA_PITCH,
         TA_YAW,
         TA_NAX,
+      };
+
+      //! Fin positions.
+      enum Fin
+      {
+        FIN_BOTTOM = 0,
+        FIN_LEFT,
+        FIN_RIGHT,
+        FIN_TOP,
+        FIN_NFINS,
       };
 
       struct Arguments
@@ -104,9 +111,9 @@ namespace Control
       struct Task: public DUNE::Tasks::Task
       {
         //! Fin commands.
-        IMC::SetServoPosition m_fins[c_fins];
+        IMC::SetServoPosition m_fins[FIN_NFINS];
         //! Fin last commands.
-        IMC::SetServoPosition m_last[c_fins];
+        IMC::SetServoPosition m_last[FIN_NFINS];
         //! Allocated torques feedback message.
         IMC::AllocatedControlTorques m_allocated;
         //! Last lats EstimatedState
@@ -118,7 +125,7 @@ namespace Control
         //! Entity id for the servo position messages
         unsigned m_spos_ent;
         //! Servo positions
-        float m_servo_pos[c_fins];
+        float m_servo_pos[FIN_NFINS];
         //! Control loops last reference
         uint32_t m_scope_ref;
         //! Time Delta
@@ -297,7 +304,7 @@ namespace Control
           reset();
 
           // Initialize fin commands.
-          for (int i = 0; i < c_fins; i++)
+          for (int i = 0; i < FIN_NFINS; i++)
           {
             m_fins[i].id = i;
             m_last[i].id = i;
@@ -516,8 +523,8 @@ namespace Control
             roll_margin_vfins = m_args.max_fin_rot - std::abs(ang);
           }
 
-          m_fins[0].value = -ang;
-          m_fins[3].value = -ang;
+          m_fins[FIN_BOTTOM].value = -ang;
+          m_fins[FIN_TOP].value = -ang;
 
           switch (m_fevu)
           {
@@ -554,8 +561,8 @@ namespace Control
             roll_margin_hfins = m_args.max_fin_rot - std::abs(ang);
           }
 
-          m_fins[1].value = -ang;
-          m_fins[2].value = -ang;
+          m_fins[FIN_LEFT].value = -ang;
+          m_fins[FIN_RIGHT].value = -ang;
 
           switch (m_fevu)
           {
@@ -575,12 +582,12 @@ namespace Control
           {
             case FEVU_RPM:
             case FEVU_MPS:
-              ang
-              = m_args.k_roll * (k / (m_args.conv[TA_ROLL] * speed * speed)) / c_fins;
+              ang = m_args.k_roll * (k / (m_args.conv[TA_ROLL] * speed * speed))
+                    / FIN_NFINS;
               angroll = ang;
               break;
             default:
-              ang = (k / m_args.conv[TA_ROLL]) / c_fins;
+              ang = (k / m_args.conv[TA_ROLL]) / FIN_NFINS;
               break;
           }
 
@@ -588,10 +595,10 @@ namespace Control
           ang = trimValue(ang, -roll_margin_hfins, roll_margin_hfins);
           ang = trimValue(ang, -roll_margin_vfins, roll_margin_vfins);
 
-          m_fins[1].value += ang;
-          m_fins[2].value -= ang;
-          m_fins[0].value -= ang;
-          m_fins[3].value += ang;
+          m_fins[FIN_LEFT].value += ang;
+          m_fins[FIN_RIGHT].value -= ang;
+          m_fins[FIN_BOTTOM].value -= ang;
+          m_fins[FIN_TOP].value += ang;
 
           // Remove the used up margin from the avaliable margins
           roll_margin_hfins -= std::abs(ang);
@@ -606,22 +613,22 @@ namespace Control
               {
                 ang = trimValue(ang, -roll_margin_hfins, roll_margin_hfins);
 
-                m_fins[1].value += ang;
-                m_fins[2].value -= ang;
+                m_fins[FIN_LEFT].value += ang;
+                m_fins[FIN_RIGHT].value -= ang;
               }
               else if (roll_margin_vfins > 0)
               {
                 ang = trimValue(ang, -roll_margin_vfins, roll_margin_vfins);
 
-                m_fins[0].value -= ang;
-                m_fins[3].value += ang;
+                m_fins[FIN_BOTTOM].value -= ang;
+                m_fins[FIN_TOP].value += ang;
               }
 
-              m_allocated.k = m_args.conv[TA_ROLL] * speed * speed * c_fins;
+              m_allocated.k = m_args.conv[TA_ROLL] * speed * speed * FIN_NFINS;
               break;
 
             default:
-              m_allocated.k = ang * m_args.conv[TA_ROLL] * c_fins;
+              m_allocated.k = ang * m_args.conv[TA_ROLL] * FIN_NFINS;
 
               // Check where to place the remaining roll torque
               ang = ((k - m_allocated.k) / m_args.conv[TA_ROLL]) * 0.5;
@@ -629,16 +636,16 @@ namespace Control
               {
                 ang = trimValue(ang, -roll_margin_hfins, roll_margin_hfins);
 
-                m_fins[1].value += ang;
-                m_fins[2].value -= ang;
+                m_fins[FIN_LEFT].value += ang;
+                m_fins[FIN_RIGHT].value -= ang;
                 m_allocated.k += ang * m_args.conv[TA_ROLL] * 2.0;
               }
               else if (roll_margin_vfins > 0)
               {
                 ang = trimValue(ang, -roll_margin_vfins, roll_margin_vfins);
 
-                m_fins[0].value -= ang;
-                m_fins[3].value += ang;
+                m_fins[FIN_BOTTOM].value -= ang;
+                m_fins[FIN_TOP].value += ang;
                 m_allocated.k += ang * m_args.conv[TA_ROLL] * 2.0;
               }
 
@@ -659,11 +666,11 @@ namespace Control
           // compute brake margin in radians
           float ang = m_args.max_fin_rot * m_args.brake_margin;
 
-          m_fins[0].value = ang;
-          m_fins[3].value = -ang;
+          m_fins[FIN_BOTTOM].value = ang;
+          m_fins[FIN_TOP].value = -ang;
 
-          m_fins[1].value = -ang;
-          m_fins[2].value = ang;
+          m_fins[FIN_LEFT].value = -ang;
+          m_fins[FIN_RIGHT].value = ang;
 
           float h_margin_left = m_args.max_fin_rot * (1.0 - m_args.brake_margin);
 
@@ -672,28 +679,28 @@ namespace Control
 
           ang = trimValue(ang, -h_margin_left, h_margin_left);
 
-          m_fins[1].value -= ang;
-          m_fins[2].value -= ang;
+          m_fins[FIN_LEFT].value -= ang;
+          m_fins[FIN_RIGHT].value -= ang;
 
           // recalculate horizontal margin
           h_margin_left = m_args.max_fin_rot - std::abs(ang);
 
           // Allocate K
-          ang = (k / m_args.conv[TA_ROLL]) / c_fins;
+          ang = (k / m_args.conv[TA_ROLL]) / FIN_NFINS;
 
           ang = trimValue(ang, -h_margin_left, h_margin_left);
 
-          m_fins[1].value += ang;
-          m_fins[2].value -= ang;
+          m_fins[FIN_LEFT].value += ang;
+          m_fins[FIN_RIGHT].value -= ang;
 
           float v_margin_left = m_args.max_fin_rot * (1.0 - m_args.brake_margin);
 
-          ang = (k / m_args.conv[TA_ROLL]) / c_fins - ang;
+          ang = (k / m_args.conv[TA_ROLL]) / FIN_NFINS - ang;
 
           ang = trimValue(ang, -v_margin_left, v_margin_left);
 
-          m_fins[0].value -= ang;
-          m_fins[3].value += ang;
+          m_fins[FIN_BOTTOM].value -= ang;
+          m_fins[FIN_TOP].value += ang;
 
           dispatchAllFins();
         }
@@ -702,10 +709,10 @@ namespace Control
         void
         brake(void)
         {
-          m_fins[0].value = m_args.max_fin_rot;
-          m_fins[3].value = -m_args.max_fin_rot;
-          m_fins[1].value = -m_args.max_fin_rot;
-          m_fins[2].value = m_args.max_fin_rot;
+          m_fins[FIN_BOTTOM].value = m_args.max_fin_rot;
+          m_fins[FIN_TOP].value = -m_args.max_fin_rot;
+          m_fins[FIN_LEFT].value = -m_args.max_fin_rot;
+          m_fins[FIN_RIGHT].value = m_args.max_fin_rot;
 
           dispatchAllFins();
         }
@@ -714,11 +721,11 @@ namespace Control
         void
         brakePitch(void)
         {
-          m_fins[0].value = 0.0;
-          m_fins[3].value = 0.0;
+          m_fins[FIN_BOTTOM].value = 0.0;
+          m_fins[FIN_TOP].value = 0.0;
 
-          m_fins[1].value = -m_args.max_fin_rot;
-          m_fins[2].value = -m_args.max_fin_rot;
+          m_fins[FIN_LEFT].value = -m_args.max_fin_rot;
+          m_fins[FIN_RIGHT].value = -m_args.max_fin_rot;
 
           dispatchAllFins();
         }
@@ -728,10 +735,17 @@ namespace Control
         computeProducedTorque(void)
         {
           IMC::ControlParcel produced_torque;
-          produced_torque.d = - (m_servo_pos[0] + m_servo_pos[3]) / 2.0;
-          produced_torque.i = - (m_servo_pos[1] + m_servo_pos[2]) / 2.0;
-          produced_torque.p = ((m_servo_pos[3] - m_servo_pos[0]) +
-                               (m_servo_pos[1] - m_servo_pos[2])) / 4.0;
+
+          produced_torque.d
+          = -(m_servo_pos[FIN_BOTTOM] + m_servo_pos[FIN_TOP]) / 2.0;
+
+          produced_torque.i
+          = -(m_servo_pos[FIN_LEFT] + m_servo_pos[FIN_RIGHT]) / 2.0;
+
+          produced_torque.p
+          = ((m_servo_pos[FIN_TOP] - m_servo_pos[FIN_BOTTOM])
+             + (m_servo_pos[FIN_LEFT] - m_servo_pos[FIN_RIGHT]))
+            / 4.0;
 
           dispatch(produced_torque);
         }
@@ -742,7 +756,7 @@ namespace Control
         {
           double delta = m_delta.getDelta();
 
-          for (int i = 0; i < c_fins; i++)
+          for (int i = 0; i < FIN_NFINS; i++)
           {
             if (delta > 0)
             {
