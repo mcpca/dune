@@ -132,8 +132,10 @@ namespace Control
         Time::Delta m_delta;
         //! Task arguments.
         Arguments m_args;
-
+        //! Moving average of the speed values, when using speed dependent
+        //! fin effect values.
         Math::MovingAverage<double>* m_avg_speed;
+        //! Speed units for speed dependent fin effect values.
         FinEffectVelocityUnit m_fevu;
 
         Task(const std::string& name, Tasks::Context& ctx):
@@ -230,7 +232,6 @@ namespace Control
           bind<IMC::ServoPosition>(this);
           bind<IMC::EstimatedState>(this);
           bind<IMC::Rpm>(this);
-
         }
 
         void parseFinEffectVelocityUnit(void)
@@ -334,7 +335,6 @@ namespace Control
 
           for (int i = 0; i < winsize; i++)
             m_avg_speed->update(fill_value);
-
         }
 
         //! Resolve entities for messages
@@ -440,8 +440,9 @@ namespace Control
         {
           if (msg->getSource() != getSystemId())
             return;
-           Memory::clear(m_last_estimated_state);
-           m_last_estimated_state =static_cast<IMC::EstimatedState*>(msg->clone());
+
+          Memory::clear(m_last_estimated_state);
+          m_last_estimated_state = msg->clone();
         }
 
         void
@@ -449,9 +450,11 @@ namespace Control
         {
           if (msg->getSource() != getSystemId())
             return;
+
           Memory::clear(m_last_rpm);
-          m_last_rpm = static_cast<IMC::Rpm*>(msg->clone());
+          m_last_rpm = msg->clone();
         }
+
         //! Allocate desired control torques on the fins
         //! @param[in] k desired control torque in roll
         //! @param[in] m desired control torque in pitch
@@ -557,7 +560,7 @@ namespace Control
           }
           else
           {
-            // Calculate the control margins for roll on the N fins
+            // Calculate the control margins for roll on the M fins
             roll_margin_hfins = m_args.max_fin_rot - std::abs(ang);
           }
 
