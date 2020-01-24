@@ -466,7 +466,6 @@ namespace Control
           float roll_margin_vfins;
           float roll_margin_hfins;
 
-          float angroll = 0;
           double speed = 0;
 
           switch (m_fevu)
@@ -517,7 +516,7 @@ namespace Control
 
           if (m_fevu)
             m_allocated.n
-            = m_args.k_yaw * m_args.conv[TA_YAW] * speed * speed * 2.0;
+            = (ang / m_args.k_yaw) * m_args.conv[TA_YAW] * speed * speed * 2.0;
           else
             m_allocated.n = ang * m_args.conv[TA_YAW] * 2.0;
 
@@ -542,19 +541,16 @@ namespace Control
           m_fins[FIN_RIGHT].value = -ang;
 
           if (m_fevu)
-            m_allocated.m
-            = m_args.k_pitch * m_args.conv[TA_PITCH] * speed * speed * 2.0;
+            m_allocated.m = (ang / m_args.k_pitch) * m_args.conv[TA_PITCH]
+                            * speed * speed * 2.0;
           else
             m_allocated.m = ang * m_args.conv[TA_PITCH] * 2.0;
 
           // Allocate K
           // Attempt to distribute evenly by the four fins
           if (m_fevu && !m_args.roll_not_velocity_dependent)
-          {
             ang = m_args.k_roll * (k / (m_args.conv[TA_ROLL] * speed * speed))
                   / FIN_NFINS;
-            angroll = ang;
-          }
           else
             ang = (k / m_args.conv[TA_ROLL]) / FIN_NFINS;
 
@@ -573,7 +569,14 @@ namespace Control
 
           if (m_fevu && !m_args.roll_not_velocity_dependent)
           {
-            ang = angroll - ang;
+            m_allocated.k = (ang / m_args.k_roll) * m_args.conv[TA_ROLL] * speed
+                            * speed * FIN_NFINS;
+
+            ang
+            = m_args.k_roll
+              * ((k - m_allocated.k) / (m_args.conv[TA_ROLL] * speed * speed))
+              * 0.5;
+
             if (roll_margin_hfins > 0)
             {
               ang = trimValue(ang, -roll_margin_hfins, roll_margin_hfins);
@@ -589,7 +592,8 @@ namespace Control
               m_fins[FIN_TOP].value += ang;
             }
 
-            m_allocated.k = m_args.conv[TA_ROLL] * speed * speed * FIN_NFINS;
+            m_allocated.k += (ang / m_args.k_roll) * m_args.conv[TA_ROLL]
+                             * speed * speed * 2.0;
           }
           else
           {
