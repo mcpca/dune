@@ -496,17 +496,11 @@ namespace Control
           }
 
           // Allocate N
-          switch (m_fevu)
-          {
-            case FEVU_RPM: // fall-through
-            case FEVU_MPS:
-              ang = m_args.k_yaw * (n / (m_args.conv[TA_YAW] * speed * speed))
-                    * 0.5;
-              break;
-            default:
-              ang = (n / m_args.conv[TA_YAW]) * 0.5;
-              break;
-          }
+          if (m_fevu)
+            ang
+            = m_args.k_yaw * (n / (m_args.conv[TA_YAW] * speed * speed)) * 0.5;
+          else
+            ang = (n / m_args.conv[TA_YAW]) * 0.5;
 
           if (trimValueMod(ang, -m_args.max_fin_rot, m_args.max_fin_rot))
           {
@@ -521,30 +515,18 @@ namespace Control
           m_fins[FIN_BOTTOM].value = -ang;
           m_fins[FIN_TOP].value = -ang;
 
-          switch (m_fevu)
-          {
-            case FEVU_RPM: // fall-through
-            case FEVU_MPS:
-              m_allocated.n
-              = m_args.k_yaw * m_args.conv[TA_YAW] * speed * speed * 2.0;
-              break;
-            default:
-              m_allocated.n = ang * m_args.conv[TA_YAW] * 2.0;
-              break;
-          }
+          if (m_fevu)
+            m_allocated.n
+            = m_args.k_yaw * m_args.conv[TA_YAW] * speed * speed * 2.0;
+          else
+            m_allocated.n = ang * m_args.conv[TA_YAW] * 2.0;
 
           // Allocate M
-          switch (m_fevu)
-          {
-            case FEVU_RPM: // fall-through
-            case FEVU_MPS:
-              ang = m_args.k_pitch
-                    * (m / (m_args.conv[TA_PITCH] * speed * speed)) * 0.5;
-              break;
-            default:
-              ang = (m / m_args.conv[TA_PITCH]) * 0.5;
-              break;
-          }
+          if (m_fevu)
+            ang = m_args.k_pitch * (m / (m_args.conv[TA_PITCH] * speed * speed))
+                  * 0.5;
+          else
+            ang = (m / m_args.conv[TA_PITCH]) * 0.5;
 
           if (trimValueMod(ang, -m_args.max_fin_rot, m_args.max_fin_rot))
           {
@@ -559,32 +541,22 @@ namespace Control
           m_fins[FIN_LEFT].value = -ang;
           m_fins[FIN_RIGHT].value = -ang;
 
-          switch (m_fevu)
-          {
-            case FEVU_RPM: // fall-through
-            case FEVU_MPS:
-              m_allocated.m
-              = m_args.k_pitch * m_args.conv[TA_PITCH] * speed * speed * 2.0;
-              break;
-            default:
-              m_allocated.m = ang * m_args.conv[TA_PITCH] * 2.0;
-              break;
-          }
+          if (m_fevu)
+            m_allocated.m
+            = m_args.k_pitch * m_args.conv[TA_PITCH] * speed * speed * 2.0;
+          else
+            m_allocated.m = ang * m_args.conv[TA_PITCH] * 2.0;
 
           // Allocate K
           // Attempt to distribute evenly by the four fins
-          switch (m_fevu & (m_args.roll_not_velocity_dependent ? 0u : ~0u))
+          if (m_fevu && !m_args.roll_not_velocity_dependent)
           {
-            case FEVU_RPM:
-            case FEVU_MPS:
-              ang = m_args.k_roll * (k / (m_args.conv[TA_ROLL] * speed * speed))
-                    / FIN_NFINS;
-              angroll = ang;
-              break;
-            default:
-              ang = (k / m_args.conv[TA_ROLL]) / FIN_NFINS;
-              break;
+            ang = m_args.k_roll * (k / (m_args.conv[TA_ROLL] * speed * speed))
+                  / FIN_NFINS;
+            angroll = ang;
           }
+          else
+            ang = (k / m_args.conv[TA_ROLL]) / FIN_NFINS;
 
           // Determine the maximum angle for even distribution
           ang = trimValue(ang, -roll_margin_hfins, roll_margin_hfins);
@@ -599,52 +571,48 @@ namespace Control
           roll_margin_hfins -= std::abs(ang);
           roll_margin_vfins -= std::abs(ang);
 
-          switch (m_fevu & (m_args.roll_not_velocity_dependent ? 0u : ~0u))
+          if (m_fevu && !m_args.roll_not_velocity_dependent)
           {
-            case FEVU_RPM: // fall-through
-            case FEVU_MPS:
-              ang = angroll - ang;
-              if (roll_margin_hfins > 0)
-              {
-                ang = trimValue(ang, -roll_margin_hfins, roll_margin_hfins);
+            ang = angroll - ang;
+            if (roll_margin_hfins > 0)
+            {
+              ang = trimValue(ang, -roll_margin_hfins, roll_margin_hfins);
 
-                m_fins[FIN_LEFT].value += ang;
-                m_fins[FIN_RIGHT].value -= ang;
-              }
-              else if (roll_margin_vfins > 0)
-              {
-                ang = trimValue(ang, -roll_margin_vfins, roll_margin_vfins);
+              m_fins[FIN_LEFT].value += ang;
+              m_fins[FIN_RIGHT].value -= ang;
+            }
+            else if (roll_margin_vfins > 0)
+            {
+              ang = trimValue(ang, -roll_margin_vfins, roll_margin_vfins);
 
-                m_fins[FIN_BOTTOM].value -= ang;
-                m_fins[FIN_TOP].value += ang;
-              }
+              m_fins[FIN_BOTTOM].value -= ang;
+              m_fins[FIN_TOP].value += ang;
+            }
 
-              m_allocated.k = m_args.conv[TA_ROLL] * speed * speed * FIN_NFINS;
-              break;
+            m_allocated.k = m_args.conv[TA_ROLL] * speed * speed * FIN_NFINS;
+          }
+          else
+          {
+            m_allocated.k = ang * m_args.conv[TA_ROLL] * FIN_NFINS;
 
-            default:
-              m_allocated.k = ang * m_args.conv[TA_ROLL] * FIN_NFINS;
+            // Check where to place the remaining roll torque
+            ang = ((k - m_allocated.k) / m_args.conv[TA_ROLL]) * 0.5;
+            if (roll_margin_hfins > 0)
+            {
+              ang = trimValue(ang, -roll_margin_hfins, roll_margin_hfins);
 
-              // Check where to place the remaining roll torque
-              ang = ((k - m_allocated.k) / m_args.conv[TA_ROLL]) * 0.5;
-              if (roll_margin_hfins > 0)
-              {
-                ang = trimValue(ang, -roll_margin_hfins, roll_margin_hfins);
+              m_fins[FIN_LEFT].value += ang;
+              m_fins[FIN_RIGHT].value -= ang;
+              m_allocated.k += ang * m_args.conv[TA_ROLL] * 2.0;
+            }
+            else if (roll_margin_vfins > 0)
+            {
+              ang = trimValue(ang, -roll_margin_vfins, roll_margin_vfins);
 
-                m_fins[FIN_LEFT].value += ang;
-                m_fins[FIN_RIGHT].value -= ang;
-                m_allocated.k += ang * m_args.conv[TA_ROLL] * 2.0;
-              }
-              else if (roll_margin_vfins > 0)
-              {
-                ang = trimValue(ang, -roll_margin_vfins, roll_margin_vfins);
-
-                m_fins[FIN_BOTTOM].value -= ang;
-                m_fins[FIN_TOP].value += ang;
-                m_allocated.k += ang * m_args.conv[TA_ROLL] * 2.0;
-              }
-
-              break;
+              m_fins[FIN_BOTTOM].value -= ang;
+              m_fins[FIN_TOP].value += ang;
+              m_allocated.k += ang * m_args.conv[TA_ROLL] * 2.0;
+            }
           }
 
           dispatchAllFins();
