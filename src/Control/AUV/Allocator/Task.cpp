@@ -472,30 +472,22 @@ namespace Control
           switch (m_fevu)
           {
             case FEVU_RPM:
-              speed = m_args.rpm_minimum / 1000.0;
-
-              if (m_last_rpm != NULL)
-              {
-                m_avg_speed->update(
+              if (m_last_rpm)
+                speed = m_avg_speed->update(
                 trimValue(m_last_rpm->value, m_args.rpm_minimum, m_args.max_rpm)
                 / 1000.0);
-
-                speed = m_avg_speed->mean();
-              }
+              else
+                speed = m_args.rpm_minimum / 1000.0;
 
               break;
 
             case FEVU_MPS:
-              speed = m_args.ms_minimum;
-
-              if (m_last_estimated_state != NULL)
-              {
-                m_avg_speed->update(trimValue(m_last_estimated_state->u,
-                                              m_args.ms_minimum,
-                                              m_args.max_ms));
-
-                speed = m_avg_speed->mean();
-              }
+              if (m_last_estimated_state)
+                speed = m_avg_speed->update(trimValue(m_last_estimated_state->u,
+                                                      m_args.ms_minimum,
+                                                      m_args.max_ms));
+              else
+                speed = m_args.ms_minimum;
 
               break;
 
