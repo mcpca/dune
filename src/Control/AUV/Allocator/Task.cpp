@@ -468,7 +468,9 @@ namespace Control
 
           double speed = 0;
 
-          switch (m_fevu)
+          FinEffectVelocityUnit const fevu = m_fevu;
+
+          switch (fevu)
           {
             case FEVU_RPM:
               if (m_last_rpm)
@@ -495,7 +497,7 @@ namespace Control
           }
 
           // Allocate N
-          if (m_fevu)
+          if (fevu)
             ang
             = m_args.k_yaw * (n / (m_args.conv[TA_YAW] * speed * speed)) * 0.5;
           else
@@ -514,14 +516,14 @@ namespace Control
           m_fins[FIN_BOTTOM].value = -ang;
           m_fins[FIN_TOP].value = -ang;
 
-          if (m_fevu)
+          if (fevu)
             m_allocated.n
             = (ang / m_args.k_yaw) * m_args.conv[TA_YAW] * speed * speed * 2.0;
           else
             m_allocated.n = ang * m_args.conv[TA_YAW] * 2.0;
 
           // Allocate M
-          if (m_fevu)
+          if (fevu)
             ang = m_args.k_pitch * (m / (m_args.conv[TA_PITCH] * speed * speed))
                   * 0.5;
           else
@@ -540,7 +542,7 @@ namespace Control
           m_fins[FIN_LEFT].value = -ang;
           m_fins[FIN_RIGHT].value = -ang;
 
-          if (m_fevu)
+          if (fevu)
             m_allocated.m = (ang / m_args.k_pitch) * m_args.conv[TA_PITCH]
                             * speed * speed * 2.0;
           else
@@ -548,7 +550,7 @@ namespace Control
 
           // Allocate K
           // Attempt to distribute evenly by the four fins
-          if (m_fevu && !m_args.roll_not_velocity_dependent)
+          if (!m_args.roll_not_velocity_dependent && fevu)
             ang = m_args.k_roll * (k / (m_args.conv[TA_ROLL] * speed * speed))
                   / FIN_NFINS;
           else
@@ -568,7 +570,7 @@ namespace Control
           roll_margin_vfins -= std::abs(ang);
 
           // Compute how much torque remains to be allocated
-          if (!m_args.roll_not_velocity_dependent && m_fevu)
+          if (!m_args.roll_not_velocity_dependent && fevu)
           {
             m_allocated.k = (ang / m_args.k_roll) * m_args.conv[TA_ROLL] * speed
                             * speed * FIN_NFINS;
@@ -591,7 +593,7 @@ namespace Control
             m_fins[FIN_LEFT].value += ang;
             m_fins[FIN_RIGHT].value -= ang;
 
-            if (!m_args.roll_not_velocity_dependent && m_fevu)
+            if (!m_args.roll_not_velocity_dependent && fevu)
               m_allocated.k += (ang / m_args.k_roll) * m_args.conv[TA_ROLL]
                                * speed * speed * 2.0;
             else
@@ -604,7 +606,7 @@ namespace Control
             m_fins[FIN_BOTTOM].value -= ang;
             m_fins[FIN_TOP].value += ang;
 
-            if (!m_args.roll_not_velocity_dependent && m_fevu)
+            if (!m_args.roll_not_velocity_dependent && fevu)
               m_allocated.k += (ang / m_args.k_roll) * m_args.conv[TA_ROLL]
                                * speed * speed * 2.0;
             else
