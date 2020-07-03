@@ -65,6 +65,11 @@ macro(dune_probe_cxx)
     if(DUNE_CXX_CLANG)
       set(DUNE_CXX_NAME "LLVM/Clang")
       set(DUNE_CXX_CANONICAL "clang")
+
+      check_cxx_compiler_flag(-w has_disable_warnings)
+      if(has_disable_warnings)
+        set(DUNE_FLAGS_NO_WARNINGS "-w")
+      endif(has_disable_warnings)
     endif(DUNE_CXX_CLANG)
   endif(NOT DUNE_CXX_NAME)
 
@@ -124,6 +129,11 @@ macro(dune_probe_cxx)
         set(DUNE_CXX_FLAGS "${DUNE_CXX_FLAGS} -fdiagnostics-show-option")
         set(DUNE_C_FLAGS "${DUNE_C_FLAGS} -fdiagnostics-show-option")
       endif(has_fdiagnostic_show_option)
+
+      check_cxx_compiler_flag(-w has_disable_warnings)
+      if(has_disable_warnings)
+        set(DUNE_FLAGS_NO_WARNINGS "-w")
+      endif(has_disable_warnings)
 
       if(NO_RTTI)
         check_cxx_compiler_flag(-fno-rtti has_fno_rtti)

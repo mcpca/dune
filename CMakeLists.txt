@@ -202,6 +202,13 @@ foreach(extlib ${extlibs})
   include(${extlib})
 endforeach(extlib ${extlibs})
 
+# Disable warnings for bundled libraries.
+foreach(file ${DUNE_VENDOR_FILES})
+  get_source_file_property(file_compile_flags ${file} COMPILE_FLAGS)
+  set_source_files_properties(${file}
+    PROPERTIES COMPILE_FLAGS "${file_compile_flags} ${DUNE_FLAGS_NO_WARNINGS}")
+endforeach(file ${DUNE_VENDOR_FILES})
+
 # Private Libraries.
 file(GLOB extlibs ${PROJECT_SOURCE_DIR}/private/vendor/libraries/*/Library.cmake)
 foreach(extlib ${extlibs})
