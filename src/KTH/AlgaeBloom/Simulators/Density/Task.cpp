@@ -67,6 +67,9 @@ namespace KTH
             double lon = es->lon;
             WGS84::displace(es->x, es->y, &lat, &lon);
 
+            lat = Angles::degrees(lat);
+            lon = Angles::degrees(lon);
+
             IMC::Chlorophyll msg;
 
             msg.value
