@@ -4,6 +4,8 @@
 // Author: Miguel Aguiar (aguiar@kth.se)                                    *
 //***************************************************************************
 
+#pragma once
+
 #include <algorithm>
 #include <memory>
 #include <stdexcept>
@@ -36,12 +38,8 @@ namespace KTH
         enum Dimensions
         {
           DIM_TIME = 0,
-
-          // DIM_DEPTH must always equal 1.
-          DIM_DEPTH,
-
-          DIM_LAT,
-          DIM_LON
+          DIM_LON,
+          DIM_LAT
         };
 
         class DensityField
@@ -68,12 +66,12 @@ namespace KTH
               std::begin(field_values) + (time_slice + 1) * space_dims
             };
 
-            m_lon = f.getDataset<double>("longitude").data;
-            m_lat = f.getDataset<double>("latitude").data;
+            m_lon = f.getDataset<double>("lon").data;
+            m_lat = f.getDataset<double>("lat").data;
 
-            std::vector<double> min = { m_lat[0], m_lon[0] };
-            std::vector<double> max = { m_lat.back(), m_lon.back() };
-            std::vector<size_t> dims = { m_dims[DIM_LAT], m_dims[DIM_LON] };
+            std::vector<double> min = { m_lon[0], m_lat[0] };
+            std::vector<double> max = { m_lon.back(), m_lat.back() };
+            std::vector<std::size_t> dims = { m_dims[DIM_LON], m_dims[DIM_LAT] };
 
             m_grid = std::make_unique<DUNE::Math::Grid<2>>(min, max, dims);
           }
@@ -82,12 +80,12 @@ namespace KTH
           evaluate(double lat, double lon)
           try
           {
-            auto neighbor = m_grid->getCorner({ lat, lon });
+            auto neighbor = m_grid->getCorner({ lon, lat });
 
             auto corner = m_grid->getCoordinates(neighbor);
 
-            double delta[2] = { (lat - corner[0]) / m_grid->getSpacing(0),
-                                (lon - corner[1]) / m_grid->getSpacing(1) };
+            double delta[2] = { (lon - corner[0]) / m_grid->getSpacing(0),
+                                (lat - corner[1]) / m_grid->getSpacing(1) };
 
             double vals[4];
 
@@ -101,6 +99,8 @@ namespace KTH
 
             neighbor[0] -= 1;
             vals[3] = m_data[m_grid->getOffset(neighbor)];
+
+            m_owner->spew("%.2f, %.2f, %.2f, %.2f", vals[0], vals[1], vals[2], vals[3]);
 
             return interpolateLinear2d(vals, delta);
           }

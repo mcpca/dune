@@ -75,6 +75,8 @@ namespace KTH
             msg.value
             = m_field ? m_field->evaluate(lat, lon) : m_args.default_value;
 
+            trace("Chl: %.4f", msg.value);
+
             dispatch(msg);
           }
 
