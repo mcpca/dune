@@ -34,6 +34,9 @@ namespace KTH
           // Position of virtual vehicle
           AbsolutePosition vp;
 
+          // Position of vehicle relative to virtual vehicle
+          RelativePosition rp;
+
           // Track bearing (rad)
           float direction;
 
@@ -78,14 +81,14 @@ namespace KTH
           ControllerState m_state;
           ControllerParameters m_params;
 
-          RelativePosition m_last_pos;
-
           float m_chl_val = 0.0;
           float m_chl_grad = 0.0;
 
           bool m_inited = false;
+          bool m_wpt_cleared = true;
 
           IMC::Reference m_ref;
+          IMC::Reference m_prev_ref;
 
           //! Constructor.
           //! @param[in] name task name.
@@ -140,20 +143,20 @@ namespace KTH
           {
             float new_val = m_data->update(msg->value);
 
-            if (m_data->sampleSize() == m_args.n_ma_pts)
-            {
-              float old_time = m_last_data_timestamp;
-              m_last_data_timestamp = Clock::get();
+            if (m_data->sampleSize() != m_args.n_ma_pts)
+              return;
 
-              m_chl_grad
-              = (new_val - m_chl_val) / (m_last_data_timestamp - old_time);
+            float old_time = m_last_data_timestamp;
+            m_last_data_timestamp = Clock::get();
 
-              spew("%.8f %.8f %.12f", m_chl_val, new_val, m_chl_grad);
+            m_chl_grad
+            = (new_val - m_chl_val) / (m_last_data_timestamp - old_time);
 
-              m_chl_val = new_val;
+            spew("%.8f %.8f %.12f", m_chl_val, new_val, m_chl_grad);
 
-              m_data->clear();
-            }
+            m_chl_val = new_val;
+
+            m_data->clear();
           }
 
           void
@@ -169,13 +172,14 @@ namespace KTH
 
             if (!m_inited)
             {
+              war("init pos = %.6f, %.6f", lat, lon);
               m_state.vp.lat = lat;
               m_state.vp.lon = lon;
             }
 
             WGS84::displacement(m_state.vp.lat, m_state.vp.lon, msg->height,
-                                lat, lon, msg->height, &m_last_pos.x,
-                                &m_last_pos.y);
+                                lat, lon, msg->height, &m_state.rp.x,
+                                &m_state.rp.y);
 
             if (!m_inited)
             {
@@ -190,7 +194,7 @@ namespace KTH
             static constexpr auto origin = RelativePosition{ 0.0, 0.0 };
             double x;
 
-            Coordinates::getTrackPosition(origin, m_state.direction, m_last_pos,
+            Coordinates::getTrackPosition(origin, m_state.direction, m_state.rp,
                                           &x);
 
             spew("along track pos: %.4f", x);
@@ -203,8 +207,26 @@ namespace KTH
           }
 
           void
+          resetVirtualPos(void)
+          {
+            WGS84::displace(m_state.rp.x, m_state.rp.y, &m_state.vp.lat,
+                            &m_state.vp.lon);
+          }
+
+          void
           consume(IMC::FollowRefState const* msg)
           {
+            if (msg->reference.isNull())
+              return;
+
+            // Assumes we are not working near (lat, lon) = (0, 0)
+            if (msg->reference->lat != m_prev_ref.lat
+                || msg->reference->lon != m_prev_ref.lon)
+              m_wpt_cleared = true;
+
+            if (!m_wpt_cleared)
+              return;
+
             if (!(msg->proximity & IMC::FollowRefState::PROX_XY_NEAR))
               return;
 
@@ -212,8 +234,24 @@ namespace KTH
 
             m_state.n_wpts++;
 
-            updateVirtualPos();
+            if (m_state.n_wpts >= 2)
+            {
+              war("Switching direction");
+              m_state.n_wpts = 0;
+
+              updateDirection();
+
+              resetVirtualPos();
+            }
+            else
+            {
+              updateVirtualPos();
+            }
+
+            m_prev_ref = m_ref;
             updateRef();
+
+            m_wpt_cleared = false;
           }
 
           void
@@ -231,13 +269,22 @@ namespace KTH
             double bearing, range;
             Coordinates::toPolar(next_wpt, &bearing, &range);
 
-            debug("bearing: %.2f, range: %.2f", Angles::degrees(bearing), range);
-
             m_ref.lat = m_state.vp.lat;
             m_ref.lon = m_state.vp.lon;
 
+            bearing += m_state.direction;
+
+            debug("bearing: %.2f, range: %.2f", Angles::degrees(bearing),
+                  range);
+
             WGS84::displace(range * std::cos(bearing),
                             range * std::sin(bearing), &m_ref.lat, &m_ref.lon);
+          }
+
+          void
+          updateDirection(void)
+          {
+
           }
 
           void
@@ -284,12 +331,17 @@ namespace KTH
           void
           onMain(void)
           {
-            m_last_pos.x = 0.0;
-            m_last_pos.y = 0.0;
+            m_state.rp.x = 0.0;
+            m_state.rp.y = 0.0;
 
             // Initialize controller state
             m_state.n_wpts = 0;
+            m_state.speed = m_args.initial_speed;
             m_state.direction = m_args.initial_heading;
+
+            // Virtual position will be initialized on first ES message.
+            m_state.vp.lat = 0.0;
+            m_state.vp.lon = 0.0;
 
             // Wait for boot
             Delay::wait(10.0);
