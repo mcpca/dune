@@ -71,6 +71,7 @@ namespace KTH
           float initial_speed;
           float initial_heading;
           float target_value;
+          float threshold;
         };
 
         struct Task : public DUNE::Tasks::Task
@@ -85,6 +86,7 @@ namespace KTH
 
           bool m_inited = false;
           bool m_wpt_cleared = true;
+          bool m_front_crossed = false;
 
           IMC::Reference m_ref;
           IMC::Reference m_prev_ref;
@@ -108,6 +110,9 @@ namespace KTH
             .units(Units::Degree);
 
             param("Target Chl Value", m_args.target_value).defaultValue("0.5");
+
+            param("Front Crossing Threshold", m_args.threshold)
+            .defaultValue("0.1");
 
             param("Following Gain", m_params.following_gain)
             .defaultValue("3.0");
@@ -150,7 +155,10 @@ namespace KTH
             Coordinates::toWGS84(*msg, lat, lon);
 
             if (lat < 0.01 || lon < 0.01)
+            {
+              war("Invalid initial position %.6f, %.6f", lat, lon);
               return;
+            }
 
             if (!m_inited)
             {
@@ -239,10 +247,13 @@ namespace KTH
           {
             int const sign = 2 * (m_state.n_wpts % 2) - 1;
 
+            double const distance = m_front_crossed ? m_params.distance : 0.0;
+
             double const along_track_displacement
-            = m_params.distance / std::tan(m_params.angle);
+            = m_front_crossed ? distance / std::tan(m_params.angle)
+                              : m_params.distance;
             RelativePosition next_wpt
-            = { along_track_displacement, sign * m_params.distance };
+            = { along_track_displacement, sign * distance };
 
             debug("next waypont is at %.6f, %.6f", next_wpt.x, next_wpt.y);
 
@@ -261,53 +272,95 @@ namespace KTH
                             range * std::sin(bearing), &m_ref.lat, &m_ref.lon);
           }
 
+          static std::vector<double>
+          gradientEstimator(const std::vector<Sample>& samples)
+          {
+            Matrix regressor(samples.size(), 3);
+            Matrix outputs(samples.size(), 1);
+
+            for (unsigned row = 0; row < samples.size(); ++row)
+            {
+              regressor(row, 0) = 1.0;
+              regressor(row, 1) = samples[row].lat;
+              regressor(row, 2) = samples[row].lon;
+
+              outputs(row) = samples[row].chl_value;
+
+              // std::printf("%.6f %.6f %.6f %.6f\n", regressor(row, 0),
+              //             regressor(row, 1), regressor(row, 2),
+                          // outputs(row, 0));
+            }
+
+            Matrix const regressor_t = transpose(regressor);
+            Matrix const parameters
+            = inverse(regressor_t * regressor) * regressor_t * outputs;
+
+            std::cout << "Parameters: " << parameters;
+
+            return { sum(outputs) / outputs.size(), parameters(1), parameters(2) };
+          }
+
           void
           updateDirection(void)
           {
-            Matrix regressor(m_samples.size(), 3);
-            Matrix outputs(m_samples.size(), 1);
-
-            for (unsigned row = 0; row < m_samples.size(); ++row)
-            {
-              regressor(row, 0) = 1.0;
-              regressor(row, 1) = m_samples[row].lat;
-              regressor(row, 2) = m_samples[row].lon;
-
-              outputs(row) = m_samples[row].chl_value;
-            }
-
-            Matrix regressor_t = transpose(regressor);
-            Matrix parameters
-            = inverse(regressor_t * regressor) * regressor_t * outputs;
-
-            inf("Gradient: %.6f %.6f", parameters(1), parameters(2));
-
-            // Deal with zero gradient
             Matrix psi(2, 1);
+            float chl_value;
 
-            psi(0) = parameters(1);
-            psi(1) = parameters(2);
-
-            double const norm = psi.norm_2();
-
-            if (norm < 1e-6)
+            if (m_front_crossed)
             {
-              war("Small gradient signal, using default heading");
-              m_state.direction = m_args.initial_heading;
-              return;
+              debug("Estimating gradient with %lu samples", m_samples.size());
+
+              auto const parameters = gradientEstimator(m_samples);
+              m_samples.clear();
+
+              debug("Parameters: %.6f %.6f %.6f", parameters[0], parameters[1],
+                    parameters[2]);
+
+              psi(0) = parameters[1];
+              psi(1) = parameters[2];
+
+              double const norm = psi.norm_2();
+
+              if (norm < 1e-6)
+              {
+                war("Small gradient signal, using default heading");
+                m_state.direction = m_args.initial_heading;
+                return;
+              }
+
+              psi = psi / norm;
+
+              // Average value of measurements
+              chl_value = parameters[0];
+            }
+            else
+            {
+              psi(0) = std::cos(m_args.initial_heading);
+              psi(1) = std::sin(m_args.initial_heading);
+
+              chl_value
+              = std::accumulate(m_samples.begin(), m_samples.end(), 0.0,
+                                [](auto const& a, auto const& b) {
+                                  return a + b.chl_value;
+                                })
+                / m_samples.size();
+
+              m_samples.clear();
+
+              if (std::fabs(chl_value - m_args.target_value) < m_args.threshold)
+              {
+                m_front_crossed = true;
+                war("Front has been found!");
+              }
             }
 
-            psi = psi / psi.norm_2();
-
+            // orthogonal to the gradient direction
             Matrix epsi(2, 1);
-
-            // Direction orthogonal to the gradient
             epsi(0) = -psi(1);
             epsi(1) = psi(0);
 
-            double const error
-            = (m_samples.back().chl_value - m_args.target_value);
-            Matrix const u_seek = -m_params.seeking_gain * error * psi;
+            double const error = m_args.target_value - chl_value;
+            Matrix const u_seek = m_params.seeking_gain * error * psi;
             Matrix const u_follow = m_params.following_gain * epsi;
             Matrix const u = u_seek + u_follow;
 
