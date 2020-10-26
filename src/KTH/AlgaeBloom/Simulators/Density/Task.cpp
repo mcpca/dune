@@ -30,12 +30,14 @@ namespace KTH
           std::string dataset_name;
           unsigned time_slice;
           float default_value;
+          unsigned n_ma_pts;
         };
 
         struct Task : public DUNE::Tasks::Task
         {
           Arguments m_args;
           DensityField* m_field;
+          std::unique_ptr<Math::MovingAverage<float>> m_data;
 
           //! Constructor.
           //! @param[in] name task name.
@@ -49,6 +51,26 @@ namespace KTH
             param("Dataset Name", m_args.dataset_name);
             param("Time Slice", m_args.time_slice).defaultValue("0");
             param("Default Value", m_args.default_value).defaultValue("0.0");
+            param("Moving Average Size", m_args.n_ma_pts).defaultValue("60");
+          }
+
+          void
+          onResourceAcquisition(void)
+          {
+            m_data
+            = std::make_unique<Math::MovingAverage<float>>(m_args.n_ma_pts);
+
+            try
+            {
+              m_field
+              = new DensityField(m_args.path, m_args.dataset_name,
+                                 m_args.time_slice, m_args.default_value, this);
+            }
+            catch (std::exception const& e)
+            {
+              err("Could not create DensityField: %s", e.what());
+              m_field = NULL;
+            }
           }
 
           void
@@ -70,29 +92,21 @@ namespace KTH
             lat = Angles::degrees(lat);
             lon = Angles::degrees(lon);
 
-            IMC::Chlorophyll msg;
-
-            msg.value
+            float val
             = m_field ? m_field->evaluate(lat, lon) : m_args.default_value;
 
-            trace("Chl: %.4f", msg.value);
+            val = m_data->update(val);
 
+            if (m_data->sampleSize() != m_args.n_ma_pts)
+              return;
+
+            trace("Chl: %.4f", val);
+
+            IMC::Chlorophyll msg;
+            msg.value = val;
             dispatch(msg);
-          }
 
-          //! Acquire resources.
-          void
-          onResourceAcquisition(void)
-          try
-          {
-            m_field
-            = new DensityField(m_args.path, m_args.dataset_name,
-                               m_args.time_slice, m_args.default_value, this);
-          }
-          catch (std::exception const& e)
-          {
-            err("Could not create DensityField: %s", e.what());
-            m_field = NULL;
+            m_data->clear();
           }
 
           //! Release resources.
