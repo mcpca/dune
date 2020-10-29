@@ -28,9 +28,9 @@ namespace KTH
         {
           std::string path;
           std::string dataset_name;
-          unsigned time_slice;
           float default_value;
           unsigned n_ma_pts;
+          double start_time;
         };
 
         struct Task : public DUNE::Tasks::Task
@@ -39,19 +39,24 @@ namespace KTH
           DensityField* m_field;
           std::unique_ptr<Math::MovingAverage<float>> m_data;
 
+          unsigned m_msg_ctr;
+
+          double m_time_origin;
+
           //! Constructor.
           //! @param[in] name task name.
           //! @param[in] ctx context.
           Task(const std::string& name, Tasks::Context& ctx)
-          : DUNE::Tasks::Task(name, ctx), m_field(NULL)
+          : DUNE::Tasks::Task(name, ctx), m_field(NULL), m_msg_ctr(0),
+            m_time_origin(Clock::get())
           {
             bind<IMC::EstimatedState>(this);
 
             param("Data File Path", m_args.path);
             param("Dataset Name", m_args.dataset_name);
-            param("Time Slice", m_args.time_slice).defaultValue("0");
             param("Default Value", m_args.default_value).defaultValue("0.0");
             param("Moving Average Size", m_args.n_ma_pts).defaultValue("60");
+            param("Start Time", m_args.start_time).defaultValue("0.0");
           }
 
           void
@@ -62,9 +67,8 @@ namespace KTH
 
             try
             {
-              m_field
-              = new DensityField(m_args.path, m_args.dataset_name,
-                                 m_args.time_slice, m_args.default_value, this);
+              m_field = new DensityField(m_args.path, m_args.dataset_name,
+                                         m_args.default_value, this);
             }
             catch (std::exception const& e)
             {
@@ -84,6 +88,14 @@ namespace KTH
               return;
             }
 
+            if (m_msg_ctr < m_args.n_ma_pts)
+            {
+              m_msg_ctr++;
+              return;
+            }
+
+            m_msg_ctr = 0;
+
             // Get vehicle pos
             double lat = es->lat;
             double lon = es->lon;
@@ -92,13 +104,16 @@ namespace KTH
             lat = Angles::degrees(lat);
             lon = Angles::degrees(lon);
 
-            float val
-            = m_field ? m_field->evaluate(lat, lon) : m_args.default_value;
+            float val = m_field
+                        ? m_field->evaluate(3600.0 * m_args.start_time
+                                            + Clock::get() - m_time_origin,
+                                            lat, lon)
+                        : m_args.default_value;
 
-            val = m_data->update(val);
+            // val = m_data->update(val);
 
-            if (m_data->sampleSize() != m_args.n_ma_pts)
-              return;
+            // if (m_data->sampleSize() != m_args.n_ma_pts)
+            //   return;
 
             trace("Chl: %.4f", val);
 
@@ -106,7 +121,7 @@ namespace KTH
             msg.value = val;
             dispatch(msg);
 
-            m_data->clear();
+            // m_data->clear();
           }
 
           //! Release resources.
