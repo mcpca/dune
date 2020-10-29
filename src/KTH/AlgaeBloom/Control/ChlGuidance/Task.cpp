@@ -272,32 +272,25 @@ namespace KTH
                             range * std::sin(bearing), &m_ref.lat, &m_ref.lon);
           }
 
-          static std::vector<double>
+          static Matrix
           gradientEstimator(const std::vector<Sample>& samples)
           {
-            Matrix regressor(samples.size(), 3);
-            Matrix outputs(samples.size(), 1);
+            Matrix regressor(samples.size() - 1, 2);
+            Matrix outputs(samples.size() - 1, 1);
 
-            for (unsigned row = 0; row < samples.size(); ++row)
+            for (unsigned row = 0; row < samples.size() - 1; ++row)
             {
-              regressor(row, 0) = 1.0;
-              regressor(row, 1) = samples[row].lat;
-              regressor(row, 2) = samples[row].lon;
+              regressor(row, 0) = samples[row].lat - samples.back().lat;
+              regressor(row, 1) = samples[row].lon - samples.back().lon;
 
-              outputs(row) = samples[row].chl_value;
-
-              // std::printf("%.6f %.6f %.6f %.6f\n", regressor(row, 0),
-              //             regressor(row, 1), regressor(row, 2),
-                          // outputs(row, 0));
+              outputs(row) = samples[row].chl_value - samples.back().chl_value;
             }
 
             Matrix const regressor_t = transpose(regressor);
-            Matrix const parameters
-            = inverse(regressor_t * regressor) * regressor_t * outputs;
 
-            std::cout << "Parameters: " << parameters;
+            // std::cout << regressor;
 
-            return { sum(outputs) / outputs.size(), parameters(1), parameters(2) };
+            return inverse(regressor_t * regressor) * regressor_t * outputs;
           }
 
           void
@@ -310,14 +303,12 @@ namespace KTH
             {
               debug("Estimating gradient with %lu samples", m_samples.size());
 
-              auto const parameters = gradientEstimator(m_samples);
+              psi = gradientEstimator(m_samples);
+
+              chl_value = m_samples.back().chl_value;
               m_samples.clear();
 
-              debug("Parameters: %.6f %.6f %.6f", parameters[0], parameters[1],
-                    parameters[2]);
-
-              psi(0) = parameters[1];
-              psi(1) = parameters[2];
+              debug("Gradient: %.6f %.6f", psi(0), psi(1));
 
               double const norm = psi.norm_2();
 
@@ -329,9 +320,6 @@ namespace KTH
               }
 
               psi = psi / norm;
-
-              // Average value of measurements
-              chl_value = parameters[0];
             }
             else
             {
@@ -367,7 +355,7 @@ namespace KTH
             spew("seek control: %.4f, %.4f", u_seek(0), u_seek(1));
             spew("follow control: %.4f, %.4f", u_follow(0), u_follow(1));
 
-            spew("Chl error: %.4f", error);
+            spew("Chl error: %.4f [%.4f - %.4f]", error, m_args.target_value, chl_value);
 
             double const heading = std::atan2(u(1), u(0));
             spew("Heading: %.2f", Angles::degrees(heading));
